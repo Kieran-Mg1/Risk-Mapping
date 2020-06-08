@@ -1,0 +1,54 @@
+### Hello! The below is basic theoretical model demonstrating how to produce a SIR graph. If you're unsure what SIR modelling is
+in epidemiology, see this first: https://en.wikipedia.org/wiki/Compartmental_models_in_epidemiology#The_SIR_model_is_dynamic_in_three_senses 
+
+## Load in required packages
+library(`ggplot2`)
+library(`gridExtra`)
+library(`reshape2`)
+library(`deSolve`)
+
+## The first step is to create an SIR function from the SIR equations
+sir <- function(time, state, parameters) {
+ with(as.list(c(state, parameters)), {
+    dS <- -beta * S * I
+    dI <-  beta * S * I - gamma * I
+    dR <-                 gamma * I
+
+    return(list(c(dS, dI, dR)))
+  })
+}
+
+### Setting parameters of the outbreak
+## Create values for the β and γ of the disease
+parameters <-   c(beta = 0.001, gamma=0.2)
+
+## Create a population of Susceptibles(S) ,  Recovered/Vaccinated(V), and one infected individual. In this example, we will be creating a low vaccine level population of  800 susceptible individuals.
+initial <- c (S = 800, I = 1, R = 199)
+
+## Create a timeframe for the outbreak to occur over
+time <- seq(0, 50, by = 0.01)
+
+## Solve using ode (General Solver for Ordinary Differential Equations)
+Output <- ode(y = initial, time = time, func = sir, parms = parameters)
+
+## Convert Output to data frame
+Output <- as.data.frame(Output)
+
+## Delete the time variable to stop it appearing as a curve on the final plot
+Output$time <- NULL
+
+## Plot the SIR model
+matplot(x = time, y = Output, type = `l`,
+        xlab = `Time`, ylab = `Susceptible, Infected, and Recovered`, main = `SIR Model`,
+        lwd = 1, lty = 1, bty = `l`, col = 2:4)
+
+## Add a legend
+legend(30, 600, c(`Susceptible`, `Infected`, `Recovered`), pch = 1, col = 2:4, bty = `n`)
+
+### Produces graph
+
+## Find peak of infected curve
+library(`ggpmisc`)
+Output$I[ggpmisc:::find_peaks(Output$I)]
+## Returns
+[1] 323.741

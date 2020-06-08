@@ -1,0 +1,80 @@
+The following is how "Spatial Smoothing" was performed in the dataset described in the rest of the repository. The centroid file
+can be found here: http://geoportal.statistics.gov.uk/datasets/output-areas-december-2011-population-weighted-centroids 
+
+## Read in centroid file. This contains the coordinates that will be used to calculate the distance between the MSOAs.
+Centroids <- read.csv(`Centroids.csv`)
+colnames(Centroids)[1] <- gsub('^...','',colnames(Centroids)[1])
+Centroids$objectid <- NULL
+Centroids$msoa11nm <- NULL
+
+## Merge the centroid and vaccine data frames to form a new data frame called `Smooth_MSOA`. This will contain the new Reff values after spatial smoothing has occurred.
+Smooth_MSOA <- merge(msoa_all_csv, Centroids, by.x=`id`)
+
+### Run loop
+## For the loop to analyse each MSOA, it was necessary to incorporate the equations  into a function
+my.loop <- function()
+  {
+## Create objects that will be required for smoothing
+  Distance <- NULL
+  Logistic_w <- NULL
+  weightsum <- NULL
+  risk_adjust <- NULL
+
+### START OF OUTER LOOP
+## The outer loop starts here, `k` will be any one MSOA centroid(the `target` MSOA)
+
+ for (k in 1:NROW(Smooth_MSOA$Longitude)) {
+
+### START OF INNER LOOP
+
+## The inner loop starts here, this will select the other MSOA `i` to be compared to `k`
+for (i in 1:NROW(Smooth_MSOA$Longitude)) {
+
+## This equation uses Pythagoras’s theorem to calculate the Euclidean distance between the target MSOA [k] and all other MSOAs[i]
+Distance[i] <- sqrt( (Smooth_MSOA$Longitude[k]- Smooth_MSOA$Longitude[i])^2 + (Smooth_MSOA$Latitude[k]-Smooth_MSOA$Latitude[i])^2 )
+
+## The logistic weight of each MSOA was then found given by how far away it was from the target MSOA
+Logistic_w[i] <- 1 / (1 + exp(3.35*(Distance[i] - 3)))
+} 
+Distance  
+Logistic_w
+
+## The inner loop ends here, all MSOAs have been assigned a weight relative to the target MSOA `k`
+  ### END OF INNER LOOP 
+
+## The next step is to find the total value for the logistic weight of the MSOAs
+ weightsum[k] <- sum(Logistic_w)
+
+## Find the adjusted Reff value after spatial smoothing (Reff   Adjust) of the target MSOA. A higher `weightsum` value will mean Reff   Adjust  is influenced to a greater extent by surrounding MSOAs
+risk_adjust[k] <- ( sum (Logistic_w*MSOA_vac$Re) ) / weightsum[k]  
+  } 
+weightsum
+risk_adjust
+
+## Return the output into a dataframe  
+output <- data.frame(weightsum, risk_adjust)
+output
+## This is the end of the outer loop
+###END OF OUTER LOOP
+} 
+## Return the function
+smooth_loop <- my.loop()
+smooth_loop
+
+### Add the new spatially adjusted Reff value for each MSOA  into to the data frame containing the centroid and vaccine data for each MSOA.
+Smooth_MSOA$`Re adj.`=smooth_loop$`Re.adjust`
+
+## Remove columns no longer needed to avoid duplicate columns in map dataframe
+Smooth_MSOA$Re <-NULL
+Smooth_MSOA$Longitude <-NULL
+Smooth_MSOA$Latitude <-NULL
+
+### Merge the data frame containing the spatially adjusted Reff values for each MSOA with the data frame containing all the data needed to build the final map.
+MSOA_Final_data <- full_join(MSOA_vac, Smooth_MSOA, by =`id`)
+
+## The spatially adjusted Reff values have now been incorporated into the map for plotting
+## Plot the adjusted Reff value map
+Plot_map_adj <- ggplot()+geom_polygon(data=MSOA_Final_data, aes(x=Longitude, y=Latitude, text=`local.authority`, name=`Re`, group=group, fill=`Re adj.`))+ scale_fill_gradient2(low='white', mid='salmon1',high='red', midpoint=1)+theme(legend.text=element_text(size=10), legend.title = element_text(size=10), axis.title=element_text(size=10), axis.text=element_text(size=10)) 
+
+##Plot_map_adj to be interactive
+ggplotly(Plot_map_adj)

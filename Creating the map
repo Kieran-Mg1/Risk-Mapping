@@ -1,0 +1,75 @@
+### Hello! The following code shows how to read in a "Shapefile" containing geographical data, and plot data within the graph.
+Due to patient confidentiality I am unable to supply the actual data that was used, however, the shapefile can be found at the
+link below, and example data should be available in the repository.
+
+## Shapefile: http://geoportal.statistics.gov.uk/datasets/b0a6d8a3dc5d4718b3fd62c548d60f81_0
+
+## Set the `working directory` as the folder/location of the shapefile and vaccine data so that R can read it in
+setwd(`~/`)
+## Read in required packages 
+library(`dplyr`) 
+library(`plyr`) 
+library(`rgdal`) 
+library(`ggplot2`) 
+library(`raster`)
+library(plotly)
+
+## Read in the latest shapefile containing the map, this will be called `MSOA_map`
+MSOA_map <- readOGR(dsn =`2011_data`) 
+## Subset the map so that only Wales is highlighted
+MSOA_Wmap <- subset(MSOA_map, substr(MSOA11_Cod,1,1) ==`W`)
+
+## Required to allow for `fortify` function in current R build
+library(rgdal)
+library(maptools)
+if (!require(gpclib)) install.packages(`gpclib`, type=`source`)
+gpclibPermit()
+
+## Convert to dataframe
+MSOA_W.map.gg <- fortify(MSOA_Wmap, region=`MSOA11_Cod`)
+
+## An MSOA map of Wales will now be in R, this can be shown with the following command
+ggplot()+geom_polygon(data=MSOA_W.map.gg, aes(x=long, y=lat, group=group))
+
+## Produces a map with `hollow` MSOAs
+ 
+
+## Read in the vaccine data, to be called "msoa_all_csv"
+## If using the "testdata" supplied in the repository, rename it to "msoa_all_csv"
+msoa_all_csv <- read.csv(file = `msoa.all.csv.csv`, header=TRUE) 
+
+## Turn this into a dataframe
+msoa_all_csv <- as.data.frame(msoa_all_csv)
+
+
+
+## By making sure the MSOA column name in both the map data and the vaccine data is the same(`id`), we can merge the two datasets so that each MSOA is assigned a vaccine count 
+MSOA_vac <- merge(MSOA_W.map.gg, msoa_all_csv, by.x = c('id'))
+
+## Find the percentage vaccinated by dividing the number of susceptible individuals by the total population of the MSOA within the dataset
+## (not available in "testdata" file)
+`Percentage Vaccinated` <- 100 - ((MSOA_vac$Susceptibles/MSOA_vac$total.population)*100)
+
+## Add this to the dataframe as a new column 
+MSOA_vac$`Percentage Vaccinated`=`Percentage Vaccinated`
+
+## Rename the columns in the dataframe to Latitude and Longitude
+MSOA_W2017gg2 <- plotly::rename(MSOA_vac, `Latitude`=`lat`,  `Longitude`=`long`)
+
+## Plot the map
+Plot_map <- ggplot()+geom_polygon(data=MSOA_vac, aes(x=Longitude, y=Latitude, text=`local.authority`, name=`Percentage Vaccinated`, group=group, fill=Re))+ scale_fill_gradient2(low='white', mid='salmon1',high='red', midpoint=1)+theme(legend.text=element_text(size=10), legend.title = element_text(size=10), axis.title=element_text(size=10), axis.text=element_text(size=10)) 
+Plot_map
+
+## Produces map with data
+
+### The next step is to create an interactive version of the map, so that hovering the cursor over any MSOA displays its Reff value, percentage vaccinated and name of the local authority for each MSOA
+
+## Load in required packages
+library(htmlwidgets)
+library(plotly)
+## Create an interactive html widget of the map
+pm <- ggplotly(Plot_map) 
+Widget <- saveWidget(pm, `map.html`, selfcontained = FALSE)
+Widget
+
+## This produces an interactive map in the local directory ready for export
